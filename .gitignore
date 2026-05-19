@@ -14,6 +14,10 @@ jd analyzer/node_modules/
 jd analyzer/dist/
 jd analyzer/.vite/
 
+# Node / Backend
+backend/node_modules/
+backend/dist/
+
 # OS
 .DS_Store
 Thumbs.db

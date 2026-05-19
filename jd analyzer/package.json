@@ -1,11 +1,11 @@
 {
-  "name": "react",
+  "name": "jd-analyzer-frontend",
   "private": true,
   "version": "0.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview"
   },
@@ -28,6 +28,7 @@
     "globals": "^17.4.0",
     "postcss": "^8.5.8",
     "tailwindcss": "^4.2.1",
+    "typescript": "^5.9.3",
     "vite": "^8.0.0"
   }
 }
