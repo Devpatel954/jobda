@@ -1,0 +1,187 @@
+# =============================================================================
+# AWS SAM (Serverless Application Model) — Deployment Template
+# =============================================================================
+#
+# WHAT IS THIS FILE?
+#   AWS SAM is Amazon's framework for defining and deploying serverless apps.
+#   This YAML file describes everything AWS needs to deploy our backend:
+#     • The Lambda function itself (code location, runtime, memory, timeout)
+#     • The API Gateway that routes HTTP requests to Lambda
+#     • IAM permissions
+#     • Environment variables
+#
+# HOW TO DEPLOY:
+#   1. Install AWS CLI + SAM CLI  →  https://docs.aws.amazon.com/sam/
+#   2. Configure credentials      →  aws configure
+#   3. Build                      →  sam build
+#   4. Deploy (guided first time) →  sam deploy --guided
+#
+# HOW IT WORKS AT RUNTIME:
+#   Browser → API Gateway (HTTPS endpoint) → Lambda → Express app (via serverless-http)
+#
+# COST:
+#   AWS Lambda free tier: 1 million requests / month + 400,000 GB-seconds.
+#   For a portfolio project this will cost $0.
+# =============================================================================
+
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31   # tells CloudFormation to treat this as a SAM template
+
+Description: >
+  Resume & JD Analyzer — Node.js Express API running on AWS Lambda + API Gateway
+
+# ---------------------------------------------------------------------------
+# GLOBAL DEFAULTS
+# These settings apply to every Lambda function defined below unless
+# overridden at the individual function level.
+# ---------------------------------------------------------------------------
+Globals:
+  Function:
+    Runtime: nodejs20.x            # Node.js 20 LTS — use this for ES modules (import/export)
+    Architectures:
+      - arm64                      # Graviton2 (ARM) — ~20% cheaper & faster than x86 for Node
+    MemorySize: 512                # MB of RAM. More RAM = more CPU too (Lambda links them)
+    Timeout: 29                    # seconds. API Gateway hard limit is 29 s.
+    Environment:
+      Variables:
+        NODE_ENV: production       # disables the `app.listen()` block in index.js
+
+  Api:
+    Cors:                          # API Gateway will add CORS headers automatically
+      AllowMethods: "'GET,POST,OPTIONS'"
+      AllowHeaders: "'Content-Type,Authorization'"
+      AllowOrigin: "'https://jd-analyzer-psi.vercel.app'"
+
+# ---------------------------------------------------------------------------
+# RESOURCES
+# Everything AWS should create: Lambda functions, API Gateway, IAM roles, etc.
+# ---------------------------------------------------------------------------
+Resources:
+
+  # ── LAMBDA FUNCTION ────────────────────────────────────────────────────────
+  ResumeAnalyzerFunction:
+    Type: AWS::Serverless::Function   # SAM shorthand for Lambda + permission + role
+
+    Properties:
+      FunctionName: resume-analyzer-api
+
+      # Where to find the code after `sam build` compiles it.
+      # SAM copies the backend/ folder here during the build step.
+      CodeUri: ./
+
+      # The export from index.js that Lambda will call on each request.
+      # Format:  <filename without .js>.<export name>
+      Handler: index.handler
+
+      Description: "Express API — resume analysis & cover letter generation"
+
+      # ── ENVIRONMENT VARIABLES ─────────────────────────────────────────────
+      # Sensitive values (API keys, DB URLs) should come from AWS Secrets
+      # Manager or SSM Parameter Store — never hard-coded here.
+      # Dynamic references syntax:  '{{resolve:ssm:/my/param}}'
+      Environment:
+        Variables:
+          NODE_ENV: production
+          # Example of pulling a secret from SSM Parameter Store at deploy time:
+          # OPENAI_API_KEY: '{{resolve:ssm:/resume-analyzer/openai-key}}'
+
+      # ── API GATEWAY EVENTS ────────────────────────────────────────────────
+      # Each event block creates an API Gateway route that triggers this function.
+      # HttpApi uses HTTP API (v2) which is cheaper and lower-latency than REST API (v1).
+      Events:
+
+        # Catch-all proxy route: forwards every HTTP method + every path to Lambda.
+        # Express handles the internal routing, so we only need one rule here.
+        ProxyRoute:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ResumeAnalyzerHttpApi
+            Method: ANY
+            Path: /{proxy+}     # {proxy+} = greedy path parameter — matches /anything/at/all
+
+        # Explicit root route (some API Gateways don't match /{proxy+} for /)
+        RootRoute:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ResumeAnalyzerHttpApi
+            Method: ANY
+            Path: /
+
+      # ── RESERVED CONCURRENCY ─────────────────────────────────────────────
+      # Maximum number of simultaneous Lambda instances for this function.
+      # Prevents one noisy function from consuming your whole account quota.
+      # Remove or raise this for production traffic.
+      ReservedConcurrentExecutions: 10
+
+      # ── TAGS ─────────────────────────────────────────────────────────────
+      # Tags help with cost allocation and resource grouping in the AWS Console.
+      Tags:
+        Project: ResumeAnalyzer
+        Environment: production
+
+  # ── HTTP API (API GATEWAY v2) ──────────────────────────────────────────────
+  # HTTP API is the modern, cheaper successor to REST API.
+  # It adds a public HTTPS URL that routes traffic to our Lambda function.
+  ResumeAnalyzerHttpApi:
+    Type: AWS::Serverless::HttpApi
+
+    Properties:
+      StageName: prod             # URL will be: https://<id>.execute-api.<region>.amazonaws.com/prod/
+
+      # CORS configuration so browsers can call this API from the frontend domain
+      CorsConfiguration:
+        AllowOrigins:
+          - "https://jd-analyzer-psi.vercel.app"
+          - "http://localhost:5173"    # Vite dev server (remove in strict production)
+        AllowMethods:
+          - GET
+          - POST
+          - OPTIONS
+        AllowHeaders:
+          - Content-Type
+          - Authorization
+        MaxAge: 300               # browsers cache pre-flight OPTIONS response for 300 seconds
+
+  # ── WARMUP SCHEDULE ─────────────────────────────────────────────────────────
+  # Pings the Lambda every 5 minutes so the container stays warm.
+  # Eliminates cold starts during normal usage hours.
+  # The handler detects { source: 'serverless-plugin-warmup' } and short-circuits.
+  WarmupSchedule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: resume-analyzer-warmup
+      Description: "Keep Lambda container warm to avoid cold starts"
+      ScheduleExpression: "rate(5 minutes)"
+      State: ENABLED
+      Targets:
+        - Arn: !GetAtt ResumeAnalyzerFunction.Arn
+          Id: WarmupTarget
+          Input: '{"source": "serverless-plugin-warmup"}'   # matches the check in index.js
+
+  # Grant EventBridge permission to invoke the Lambda function
+  WarmupLambdaPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref ResumeAnalyzerFunction
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt WarmupSchedule.Arn
+
+# ---------------------------------------------------------------------------
+# OUTPUTS
+# Values printed after `sam deploy` completes. Copy the API URL into the
+# frontend's environment variable (VITE_API_URL).
+# ---------------------------------------------------------------------------
+Outputs:
+
+  ApiBaseUrl:
+    Description: "HTTPS base URL for the deployed API — set this as VITE_API_URL in the frontend"
+    Value: !Sub "https://${ResumeAnalyzerHttpApi}.execute-api.${AWS::Region}.amazonaws.com/prod"
+
+  LambdaFunctionArn:
+    Description: "ARN of the deployed Lambda function (useful for CI/CD pipelines)"
+    Value: !GetAtt ResumeAnalyzerFunction.Arn
+
+  LambdaFunctionName:
+    Description: "Lambda function name (use with aws logs tail to stream logs locally)"
+    Value: !Ref ResumeAnalyzerFunction
