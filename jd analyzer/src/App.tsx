@@ -1,41 +1,7 @@
-﻿// =============================================================================
-// FRONTEND â€” React + TypeScript
-// =============================================================================
-//
-// WHAT IS REACT?
-//   React is a JavaScript library for building user interfaces. Instead of
-//   manually updating the webpage every time data changes, React re-renders
-//   only the parts that changed automatically. You build the UI out of
-//   small reusable pieces called "components" (functions that return HTML).
-//
-// WHAT IS TYPESCRIPT?
-//   TypeScript is JavaScript with "types" added. A type describes what kind
-//   of value a variable can hold: number, string, boolean, or a custom shape.
-//   TypeScript catches mistakes at edit-time instead of at runtime.
-//   e.g. `const score: number = 75` â€” TypeScript won't let you put "hello" here.
-//
-// HOW THIS FILE IS ORGANISED:
-//   1. Imports       â€” bring in external libraries
-//   2. Constants     â€” data that never changes (API URL, static lists)
-//   3. Small UI components â€” CircularProgress, FeedbackCard, SkillPill, etc.
-//   4. Large sections â€” FileDropzone, Header, HowItWorks, etc.
-//   5. Main App component â€” ties everything together
-// =============================================================================
+﻿import { useState, useRef, useCallback } from 'react'
 
-// --- IMPORTS ------------------------------------------------------------------
-
-// React built-ins:
-//   useState    â†’ stores values that can change over time (like a form field)
-//   useRef      â†’ holds a reference to a DOM element (e.g. the hidden file input)
-//   useCallback â†’ memoises a function so it isn't recreated on every render
-import { useState, useRef, useCallback } from 'react'
-
-// framer-motion: a library for smooth animations and transitions.
-//   motion.div     â†’ a <div> that can be animated
-//   AnimatePresence â†’ animates components when they appear or disappear
 import { motion, AnimatePresence } from 'framer-motion'
 
-// lucide-react: a collection of icon components (SVG icons as React components)
 import {
   Upload, FileText, CheckCircle2, Github, Zap,
   Loader2, X, Star, AlertCircle, Lightbulb,
@@ -47,8 +13,6 @@ import {
 
 import './App.css'
 
-// Import our TypeScript type definitions from a separate file.
-// Types describe the "shape" of data objects so TypeScript can check our code.
 import type {
   AnalysisResult,
   FeedbackCardProps,
@@ -59,36 +23,15 @@ import type {
   CoverLetterSectionProps,
 } from './types'
 
-
-// --- CONFIGURATION ------------------------------------------------------------
-
-// The URL of our backend server.
-// In development: uses http://localhost:8000
-// In production:  set VITE_API_URL in Vercel/Netlify environment variables
-// `.replace(/\/$/, '')` removes a trailing slash if someone adds one by mistake
 const API_BASE = (import.meta.env.VITE_API_URL || 'http://localhost:8000').replace(/\/$/, '')
 
-
-// =============================================================================
-// SMALL UI COMPONENTS
-// =============================================================================
-// Each of these is a pure display component: it receives "props" (inputs) and
-// returns JSX (HTML-like syntax). They don't make API calls or manage state.
-// =============================================================================
-
-// --- CIRCULAR PROGRESS BAR ---------------------------------------------------
-// Shows the match score as a circular ring that fills from 0% to the score value.
-// Props: `value` â€” a number from 0 to 100
 function CircularProgress({ value }: CircularProgressProps) {
-  // SVG geometry: radius determines the size of the ring
+ 
   const radius        = 52
-  const circumference = 2 * Math.PI * radius  // full circumference of the circle
+  const circumference = 2 * Math.PI * radius 
 
-  // strokeDashoffset controls how much of the ring is "filled".
-  // 0 offset = fully filled ring; full circumference offset = empty ring.
   const offset = circumference - (value / 100) * circumference
 
-  // Pick ring colour based on score: green = excellent, amber = good, red = needs work
   const strokeColor =
     value >= 80 ? '#22c55e'   // green
     : value >= 60 ? '#f59e0b' // amber
@@ -104,7 +47,6 @@ function CircularProgress({ value }: CircularProgressProps) {
       {/* The SVG circle. -rotate-90 makes it start at the top instead of the right */}
       <div className="relative flex items-center justify-center w-40 h-40">
         <svg className="w-40 h-40 -rotate-90" viewBox="0 0 120 120">
-          {/* Background grey track */}
           <circle
             cx="60" cy="60" r={radius}
             className="fill-none stroke-slate-100"
@@ -118,13 +60,11 @@ function CircularProgress({ value }: CircularProgressProps) {
             strokeWidth="10"
             strokeLinecap="round"
             strokeDasharray={circumference}
-            initial={{ strokeDashoffset: circumference }}  // start: empty
-            animate={{ strokeDashoffset: offset }}          // end: filled to `value`
+            initial={{ strokeDashoffset: circumference }}
+            animate={{ strokeDashoffset: offset }}
             transition={{ duration: 1.6, ease: 'easeOut' }}
           />
         </svg>
-
-        {/* Score number displayed in the centre of the ring */}
         <div className="absolute inset-0 flex flex-col items-center justify-center">
           <motion.span
             className="text-3xl font-extrabold text-slate-800 leading-none"
@@ -139,8 +79,6 @@ function CircularProgress({ value }: CircularProgressProps) {
           </span>
         </div>
       </div>
-
-      {/* Label badge below the ring */}
       <span
         className="text-xs font-semibold px-3 py-1 rounded-full"
         style={{ backgroundColor: `${strokeColor}18`, color: strokeColor }}
@@ -151,13 +89,6 @@ function CircularProgress({ value }: CircularProgressProps) {
   )
 }
 
-
-// --- FEEDBACK CARD ------------------------------------------------------------
-// A card showing a list of bullet points (used for Strengths, Missing Keywords, Tips).
-// Props: icon, title, items (the bullet text), color theme, animation delay
-
-// Defines the CSS classes for each colour theme.
-// TypeScript `as const` tells TypeScript these are exact literal strings, not just "string".
 const cardThemes = {
   green:  { card: 'border-emerald-100', iconBg: 'bg-emerald-100 text-emerald-600', dot: 'bg-emerald-400' },
   red:    { card: 'border-rose-100',    iconBg: 'bg-rose-100 text-rose-600',       dot: 'bg-rose-400'    },
@@ -168,26 +99,22 @@ function FeedbackCard({ icon, title, items, color, delay = 0 }: FeedbackCardProp
   const theme = cardThemes[color]
 
   return (
-    // motion.div animates the card fading in and sliding up when it mounts
+  
     <motion.div
-      initial={{ opacity: 0, y: 24 }}   // start: invisible, 24px below final position
-      animate={{ opacity: 1, y: 0 }}     // end: fully visible, in final position
+      initial={{ opacity: 0, y: 24 }} 
+      animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.45, delay }}
       className={`bg-white rounded-2xl border ${theme.card} shadow-sm p-5 flex flex-col gap-4`}
     >
-      {/* Card header: icon + title */}
       <div className="flex items-center gap-3">
         <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${theme.iconBg}`}>
           {icon}
         </div>
         <h3 className="font-semibold text-slate-800 text-sm">{title}</h3>
       </div>
-
-      {/* Bullet point list */}
       <ul className="space-y-2.5">
         {items.map((item, i) => (
           <li key={i} className="flex items-start gap-2.5 text-sm text-slate-600 leading-relaxed">
-            {/* Coloured dot bullet */}
             <span className={`mt-[7px] w-1.5 h-1.5 rounded-full flex-shrink-0 ${theme.dot}`} />
             {item}
           </li>
@@ -196,7 +123,6 @@ function FeedbackCard({ icon, title, items, color, delay = 0 }: FeedbackCardProp
     </motion.div>
   )
 }
-
 
 // --- SKILL PILL ---------------------------------------------------------------
 // A small badge showing one skill. Green with a checkmark if found in resume,
@@ -219,18 +145,10 @@ function SkillPill({ label, found }: SkillPillProps) {
   )
 }
 
-
-// =============================================================================
-// RESULTS DASHBOARD
-// =============================================================================
-// Shown after the user clicks "Analyze". Receives the full analysis response
-// from the backend and renders the score, feedback cards, and skill pills.
 function ResultsDashboard({ data }: ResultsDashboardProps) {
-  // Destructure the data object into named variables for cleaner code.
-  // This is the same as: const score = data.score; const strengths = data.strengths; etc.
+
   const { score, strengths, missingKeywords, tips, foundSkills, requiredSkills } = data
 
-  // Pick a summary message based on the score
   const matchMessage =
     score >= 80
       ? 'Your resume is strongly aligned. A few tweaks could make it perfect.'
@@ -239,7 +157,7 @@ function ResultsDashboard({ data }: ResultsDashboardProps) {
       : 'Significant gaps detected. Tailor your resume closely before applying.'
 
   return (
-    // motion.section fades in the entire results panel
+  
     <motion.section
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
@@ -248,24 +166,20 @@ function ResultsDashboard({ data }: ResultsDashboardProps) {
       className="mt-10 space-y-6"
       aria-label="Analysis results"
     >
-      {/* â”€â”€ Score Summary Card â”€â”€ */}
+  
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5 }}
         className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 flex flex-col sm:flex-row items-center gap-8"
       >
-        {/* Circular progress ring on the left */}
+  
         <CircularProgress value={score} />
-
-        {/* Text summary on the right */}
         <div className="text-center sm:text-left">
           <h2 className="text-2xl font-bold text-slate-800 mb-2">
             {score >= 80 ? 'ðŸŽ‰ Excellent Match!' : score >= 60 ? 'ðŸ‘ Good Potential' : 'âš ï¸ Needs Tailoring'}
           </h2>
           <p className="text-slate-500 text-sm leading-relaxed max-w-md">{matchMessage}</p>
-
-          {/* Skill count summary */}
           <div className="mt-4 flex flex-wrap gap-4 text-xs text-slate-500 justify-center sm:justify-start">
             <span className="flex items-center gap-1.5">
               <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 inline-block" />
@@ -278,15 +192,11 @@ function ResultsDashboard({ data }: ResultsDashboardProps) {
           </div>
         </div>
       </motion.div>
-
-      {/* â”€â”€ Three Feedback Cards: Strengths / Missing Keywords / Tips â”€â”€ */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <FeedbackCard icon={<Star size={16} />}        title="Strengths"        items={strengths}       color="green"  delay={0.1} />
         <FeedbackCard icon={<AlertCircle size={16} />} title="Missing Keywords" items={missingKeywords} color="red"    delay={0.2} />
         <FeedbackCard icon={<Lightbulb size={16} />}   title="Improvement Tips" items={tips}            color="indigo" delay={0.3} />
       </div>
-
-      {/* â”€â”€ Skill Gap Analysis: all skills as coloured pills â”€â”€ */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -301,9 +211,7 @@ function ResultsDashboard({ data }: ResultsDashboardProps) {
           Skills detected in the job description â€” green = present in your resume, red = missing.
         </p>
         <div className="flex flex-wrap gap-2">
-          {/* Render a green pill for each matched skill */}
           {foundSkills.map(skill => <SkillPill key={skill} label={skill} found />)}
-          {/* Render a red pill for each missing skill */}
           {requiredSkills.map(skill => <SkillPill key={skill} label={skill} found={false} />)}
         </div>
       </motion.div>
@@ -311,28 +219,18 @@ function ResultsDashboard({ data }: ResultsDashboardProps) {
   )
 }
 
-
-// =============================================================================
-// FILE DROPZONE
-// =============================================================================
-// The resume upload area. Supports both click-to-browse and drag-and-drop.
-// Props:
-//   file   â†’ the currently selected File object (or null if nothing selected)
-//   onFile â†’ callback called with the new File when the user selects one
 function FileDropzone({ file, onFile }: FileDropzoneProps) {
-  // useRef creates a reference to the hidden <input type="file"> element.
-  // We trigger it programmatically when the user clicks the dropzone.
+ 
   const inputRef = useRef<HTMLInputElement>(null)
 
-  // useState tracks whether the user is currently dragging a file over the zone
+  
   const [dragging, setDragging] = useState(false)
 
-  // useCallback wraps the function so it isn't recreated on every render.
-  // Only matters for performance when passed as a prop to child components.
+ 
   const handleDrop = useCallback((e: React.DragEvent) => {
-    e.preventDefault()          // prevent the browser from opening the file
+    e.preventDefault()         
     setDragging(false)
-    const droppedFile = e.dataTransfer.files[0]  // get the first dropped file
+    const droppedFile = e.dataTransfer.files[0] 
     if (droppedFile) onFile(droppedFile)
   }, [onFile])
 
@@ -348,7 +246,7 @@ function FileDropzone({ file, onFile }: FileDropzoneProps) {
       {/* AnimatePresence animates between the "file selected" and "empty dropzone" states */}
       <AnimatePresence mode="wait">
         {file ? (
-          // â”€â”€ File already selected: show the file name with a remove button â”€â”€
+
           <motion.div
             key="uploaded"
             initial={{ opacity: 0, scale: 0.96 }}
@@ -357,20 +255,15 @@ function FileDropzone({ file, onFile }: FileDropzoneProps) {
             className="flex-1 flex flex-col justify-center"
           >
             <div className="flex items-center gap-3 p-4 rounded-xl border border-emerald-200 bg-emerald-50">
-              {/* Green checkmark icon */}
               <div className="w-10 h-10 bg-emerald-100 rounded-lg flex items-center justify-center flex-shrink-0">
                 <CheckCircle2 size={20} className="text-emerald-500" />
               </div>
-
-              {/* File name and size */}
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-semibold text-emerald-800 truncate">{file.name}</p>
                 <p className="text-xs text-emerald-500 mt-0.5">
                   {(file.size / 1024).toFixed(1)} KB Â· Ready for analysis
                 </p>
               </div>
-
-              {/* Remove file button: calls onFile(null) to clear the selection */}
               <button
                 onClick={() => onFile(null)}
                 className="text-emerald-400 hover:text-emerald-700 transition-colors p-1 rounded-lg hover:bg-emerald-100"
@@ -384,20 +277,20 @@ function FileDropzone({ file, onFile }: FileDropzoneProps) {
             </p>
           </motion.div>
         ) : (
-          // â”€â”€ No file selected: show the drag-and-drop zone â”€â”€
+
           <motion.button
             key="dropzone"
             initial={{ opacity: 0, scale: 0.96 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.96 }}
             type="button"
-            onClick={() => inputRef.current?.click()}       // open the file picker on click
-            onDrop={handleDrop}                             // handle drag-and-drop
+            onClick={() => inputRef.current?.click()}
+            onDrop={handleDrop}
             onDragOver={(e) => { e.preventDefault(); setDragging(true) }}
             onDragLeave={() => setDragging(false)}
             className={`flex-1 flex flex-col items-center justify-center gap-4 rounded-xl border-2 border-dashed transition-all cursor-pointer py-12 ${
               dragging
-                ? 'border-indigo-400 bg-indigo-50 scale-[1.01]'  // highlighted when dragging
+                ? 'border-indigo-400 bg-indigo-50 scale-[1.01]'
                 : 'border-slate-200 bg-slate-50 hover:border-indigo-300 hover:bg-indigo-50/50'
             }`}
           >
@@ -413,8 +306,6 @@ function FileDropzone({ file, onFile }: FileDropzoneProps) {
           </motion.button>
         )}
       </AnimatePresence>
-
-      {/* Hidden file input â€” clicking the dropzone button triggers this */}
       <input
         ref={inputRef}
         type="file"
@@ -427,17 +318,10 @@ function FileDropzone({ file, onFile }: FileDropzoneProps) {
   )
 }
 
-
-// =============================================================================
-// HEADER
-// =============================================================================
-// The fixed navigation bar at the top of the page.
 function Header() {
   return (
     <header className="fixed top-0 left-0 right-0 z-50 bg-white/80 backdrop-blur-md border-b border-slate-100 shadow-sm">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
-
-        {/* Logo and app name */}
         <div className="flex items-center gap-2.5">
           <div className="w-8 h-8 bg-indigo-600 rounded-xl flex items-center justify-center shadow-md shadow-indigo-200">
             <Zap size={16} className="text-white" />
@@ -447,8 +331,6 @@ function Header() {
             AI
           </span>
         </div>
-
-        {/* Navigation links */}
         <nav className="flex items-center gap-1">
           <a
             href="#how-it-works"
@@ -471,11 +353,6 @@ function Header() {
   )
 }
 
-
-// =============================================================================
-// HOW IT WORKS SECTION
-// =============================================================================
-// Static explanatory section â€” data lives in the array below.
 const HOW_IT_WORKS_STEPS = [
   { icon: <Upload size={22} />,   title: 'Upload Your Resume',       desc: 'Drop your PDF resume into the upload zone. We never store your file.' },
   { icon: <FileText size={22} />, title: 'Paste the Job Description', desc: 'Copy and paste the complete job posting into the text area on the right.' },
@@ -490,8 +367,6 @@ function HowItWorks() {
           <h2 className="text-2xl font-bold text-slate-800">How It Works</h2>
           <p className="text-slate-500 text-sm mt-2">Three steps to a tailored, job-ready resume.</p>
         </div>
-
-        {/* Three-column grid of steps */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 relative">
           {/* Horizontal connector line (visible only on desktop) */}
           <div className="hidden md:block absolute top-6 left-[calc(16.67%+24px)] right-[calc(16.67%+24px)] h-px bg-slate-200" />
@@ -512,17 +387,8 @@ function HowItWorks() {
   )
 }
 
-
-// =============================================================================
-// COVER LETTER SECTION
-// =============================================================================
-// Lets the user generate a personalised cover letter using their uploaded resume.
-// Props:
-//   file            â†’ the resume file already selected in the main analyzer
-//   jobDescription  â†’ the job description already entered in the main analyzer
 function CoverLetterSection({ file, jobDescription }: CoverLetterSectionProps) {
-  // useState stores values that change when the user interacts with the form.
-  // Each call returns [currentValue, setterFunction].
+
   const [clName,      setClName]      = useState('')           // applicant's name
   const [clRole,      setClRole]      = useState('')           // target job title
   const [clJd,        setClJd]        = useState(jobDescription) // job description text
@@ -538,27 +404,24 @@ function CoverLetterSection({ file, jobDescription }: CoverLetterSectionProps) {
   // The button is only active when a resume is selected and JD has enough text
   const canGenerate = file !== null && clJd.trim().length >= 30
 
-  // Called when the user clicks "Generate Cover Letter"
   const handleGenerate = async () => {
-    if (!canGenerate || generating) return  // guard against double-clicks
-
+    if (!canGenerate || generating) return
     setGenerating(true)
     setCoverLetter('')
     setError(null)
 
     try {
-      // FormData is the standard way to send a file + text fields in one HTTP request
+
       const form = new FormData()
       form.append('resume',          file as File)
       form.append('job_description', clJd)
       form.append('applicant_name',  clName.trim() || 'Applicant')
       form.append('target_role',     clRole.trim() || 'this position')
 
-      // `fetch` makes an HTTP POST request to the backend endpoint
       const res = await fetch(`${API_BASE}/cover-letter`, { method: 'POST', body: form })
 
       if (!res.ok) {
-        // Try to read the error message from the response, or use a generic one
+
         const errData = await res.json().catch(() => ({}))
         throw new Error((errData as { detail?: string }).detail || `Server error ${res.status}`)
       }
@@ -575,7 +438,7 @@ function CoverLetterSection({ file, jobDescription }: CoverLetterSectionProps) {
         setError(msg)
       }
     } finally {
-      setGenerating(false)  // always re-enable the button, even if there was an error
+      setGenerating(false)
     }
   }
 
@@ -590,7 +453,6 @@ function CoverLetterSection({ file, jobDescription }: CoverLetterSectionProps) {
   return (
     <section id="cover-letter" className="py-16 px-4 sm:px-6 bg-white">
       <div className="max-w-4xl mx-auto">
-        {/* Section heading */}
         <div className="text-center mb-10">
           <span className="inline-flex items-center gap-1.5 bg-violet-50 text-violet-700 text-xs font-semibold px-3.5 py-1.5 rounded-full border border-violet-100 mb-4">
             <Edit3 size={12} /> AI Cover Letter
@@ -600,8 +462,6 @@ function CoverLetterSection({ file, jobDescription }: CoverLetterSectionProps) {
             Uses your uploaded resume's skills to write a personalised, job-specific cover letter in seconds.
           </p>
         </div>
-
-        {/* Warning if no resume is uploaded yet */}
         {!file && (
           <motion.div
             initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
@@ -611,10 +471,7 @@ function CoverLetterSection({ file, jobDescription }: CoverLetterSectionProps) {
             <span>Upload your resume in the <strong>Analyze Your Resume</strong> section above first.</span>
           </motion.div>
         )}
-
-        {/* Form */}
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 space-y-5">
-          {/* Name and role inputs side by side on wide screens */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-semibold text-slate-700 mb-2">
@@ -641,8 +498,6 @@ function CoverLetterSection({ file, jobDescription }: CoverLetterSectionProps) {
               />
             </div>
           </div>
-
-          {/* Job description textarea */}
           <div>
             <label className="block text-sm font-semibold text-slate-700 mb-2">
               <span className="flex items-center gap-2"><FileText size={14} className="text-violet-500" /> Job Description</span>
@@ -670,8 +525,6 @@ function CoverLetterSection({ file, jobDescription }: CoverLetterSectionProps) {
               </motion.div>
             )}
           </AnimatePresence>
-
-          {/* Generate button */}
           <motion.button
             onClick={handleGenerate}
             disabled={!canGenerate || generating}
@@ -699,7 +552,6 @@ function CoverLetterSection({ file, jobDescription }: CoverLetterSectionProps) {
               transition={{ duration: 0.45 }}
               className="mt-6 bg-white rounded-2xl border border-violet-200 shadow-sm overflow-hidden"
             >
-              {/* Header bar with copy button */}
               <div className="flex items-center justify-between px-6 py-4 border-b border-violet-100 bg-violet-50">
                 <div className="flex items-center gap-2">
                   <div className="w-7 h-7 rounded-lg bg-violet-100 flex items-center justify-center">
@@ -728,8 +580,6 @@ function CoverLetterSection({ file, jobDescription }: CoverLetterSectionProps) {
               <div className="px-6 py-5">
                 <pre className="text-sm text-slate-700 leading-relaxed whitespace-pre-wrap font-sans">{coverLetter}</pre>
               </div>
-
-              {/* Disclaimer */}
               <div className="px-6 pb-5">
                 <p className="text-xs text-slate-400 flex items-center gap-1.5">
                   <AlertCircle size={11} />
@@ -744,22 +594,13 @@ function CoverLetterSection({ file, jobDescription }: CoverLetterSectionProps) {
   )
 }
 
-
-// =============================================================================
-// STATS SECTION
-// =============================================================================
-// Four number cards showing social proof statistics (hard-coded display values).
-
-// TypeScript: define exactly which colour strings are allowed for StatColor.
-// This prevents typos like "indgio" from slipping through.
 type StatColor = 'indigo' | 'emerald' | 'violet' | 'amber'
 
-// TypeScript interface: describes the shape of one stat object
 interface Stat {
   icon:  React.ReactNode  // an icon component
   value: string           // display value like "50K+" or "<30s"
   label: string           // description label
-  color: StatColor        // theme colour
+  color: StatColor       
 }
 
 const STATS: Stat[] = [
@@ -790,8 +631,6 @@ function StatsSection() {
             Join tens of thousands of job seekers who have used ResumeMatch AI to land interviews faster.
           </p>
         </div>
-
-        {/* Four-column grid of stat cards */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-5">
           {STATS.map((stat, i) => {
             const { bg, icon, border } = statColors[stat.color]
@@ -818,11 +657,6 @@ function StatsSection() {
   )
 }
 
-
-// =============================================================================
-// SCORE BREAKDOWN SECTION
-// =============================================================================
-// Explains the three signals that make up the match score, with animated bars.
 interface BreakdownItem {
   label: string
   desc:  string
@@ -859,7 +693,6 @@ function ScoreBreakdownSection() {
               viewport={{ once: true }} transition={{ duration: 0.45, delay: i * 0.12 }}
               className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6"
             >
-              {/* Label and weight percentage */}
               <div className="flex items-start justify-between mb-3">
                 <div className="flex items-center gap-2.5">
                   <div className="w-8 h-8 rounded-lg bg-slate-50 border border-slate-100 flex items-center justify-center">
@@ -872,8 +705,6 @@ function ScoreBreakdownSection() {
                 </div>
                 <span className="text-sm font-bold text-slate-700 tabular-nums">{item.pct}%</span>
               </div>
-
-              {/* Animated progress bar */}
               <div className="h-2 rounded-full bg-slate-100 overflow-hidden">
                 <motion.div
                   className={`h-full rounded-full ${item.color}`}
@@ -895,11 +726,6 @@ function ScoreBreakdownSection() {
   )
 }
 
-
-// =============================================================================
-// TESTIMONIALS SECTION
-// =============================================================================
-// Hard-coded quote cards from fictional users.
 interface Testimonial {
   name:     string
   role:     string
@@ -945,17 +771,12 @@ function TestimonialsSection() {
               viewport={{ once: true }} transition={{ duration: 0.45, delay: i * 0.12 }}
               className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 flex flex-col gap-4"
             >
-              {/* Star rating */}
               <div className="flex gap-0.5">
                 {Array.from({ length: t.stars }).map((_, s) => (
                   <Star key={s} size={14} className="text-amber-400 fill-amber-400" />
                 ))}
               </div>
-
-              {/* Quote text */}
               <p className="text-sm text-slate-600 leading-relaxed flex-1">"{t.quote}"</p>
-
-              {/* Author info */}
               <div className="flex items-center gap-3 pt-2 border-t border-slate-100">
                 <div className={`w-9 h-9 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0 ${t.color}`}>
                   {t.initials}
@@ -973,11 +794,6 @@ function TestimonialsSection() {
   )
 }
 
-
-// =============================================================================
-// FAQ SECTION
-// =============================================================================
-// Accordion-style frequently asked questions. One question can be open at a time.
 interface FaqItem { q: string; a: string }
 
 const FAQ_ITEMS: FaqItem[] = [
@@ -1008,8 +824,7 @@ const FAQ_ITEMS: FaqItem[] = [
 ]
 
 function FAQSection() {
-  // openIndex: which FAQ item is currently expanded (null = all closed)
-  // TypeScript `number | null` means it can be either a number or null
+ 
   const [openIndex, setOpenIndex] = useState<number | null>(null)
 
   // Toggle: if clicking the already-open item, close it; otherwise open the clicked one
@@ -1074,13 +889,8 @@ function FAQSection() {
   )
 }
 
-
-// =============================================================================
-// CTA BANNER
-// =============================================================================
-// A full-width call-to-action that scrolls the user back to the analyzer.
 function CTABanner() {
-  // Smooth-scroll to the analyzer section when the button is clicked
+
   const scrollToAnalyzer = () => {
     document.querySelector('[aria-label="Resume analyzer"]')?.scrollIntoView({ behavior: 'smooth' })
   }
@@ -1122,16 +932,11 @@ function CTABanner() {
   )
 }
 
-
-// =============================================================================
-// FOOTER
-// =============================================================================
 function Footer() {
   return (
     <footer className="bg-slate-900 text-slate-400 py-10">
       <div className="max-w-6xl mx-auto px-4 sm:px-6">
         <div className="flex flex-col sm:flex-row items-center justify-between gap-4 text-sm">
-          {/* Brand mark */}
           <div className="flex items-center gap-2">
             <div className="w-6 h-6 bg-indigo-600 rounded-lg flex items-center justify-center">
               <Zap size={12} className="text-white" />
@@ -1139,8 +944,6 @@ function Footer() {
             <span className="font-semibold text-slate-200">ResumeMatch</span>
             <span className="text-slate-600 ml-2">Â© {new Date().getFullYear()}</span>
           </div>
-
-          {/* Links */}
           <div className="flex items-center gap-5">
             <a href="#" className="hover:text-white transition-colors text-xs">Privacy Policy</a>
             <a href="#" className="hover:text-white transition-colors text-xs">Terms of Service</a>
@@ -1159,64 +962,33 @@ function Footer() {
   )
 }
 
-
-// =============================================================================
-// MAIN APP COMPONENT
-// =============================================================================
-// This is the root component that React renders into the page.
-// It owns the shared state (file, jobDescription, results) and passes it down
-// to child components as props.
-//
-// WHAT IS STATE?
-//   State is data that can change and should cause the UI to update.
-//   Each `useState` call returns [currentValue, setterFunction].
-//   Calling the setter causes React to re-render only the affected parts.
 export default function App() {
-  // The PDF file the user selected (null if nothing selected yet)
   const [file, setFile] = useState<File | null>(null)
-
-  // The job description text typed/pasted into the textarea
   const [jobDescription, setJobDescription] = useState('')
-
-  // Whether the backend request is currently in progress
   const [loading, setLoading] = useState(false)
-
-  // The analysis results returned from the backend (null until analysis runs)
   const [results, setResults] = useState<AnalysisResult | null>(null)
-
-  // An error message to display to the user (null if no error)
   const [error, setError] = useState<string | null>(null)
-
-  // The "Analyze" button is only enabled when both inputs are provided
   const canAnalyze = file !== null && jobDescription.trim().length >= 50
-
-  // Called when the user clicks "Analyze My Resume"
   const handleAnalyze = async () => {
-    if (!canAnalyze || loading) return  // prevent double-clicks
+    if (!canAnalyze || loading) return
 
     setLoading(true)
     setResults(null)
     setError(null)
 
     try {
-      // Build the multipart form data (file + text field)
       const formData = new FormData()
       formData.append('resume',          file)
       formData.append('job_description', jobDescription)
-
-      // POST the form data to the backend /analyze endpoint
       const response = await fetch(`${API_BASE}/analyze`, { method: 'POST', body: formData })
 
       if (!response.ok) {
-        // Parse and re-throw the backend error message
         const errData = await response.json().catch(() => ({}))
         throw new Error(
           (errData as { detail?: string }).detail ||
           `Server returned ${response.status}. Check that the backend is running.`
         )
       }
-
-      // Parse the JSON response and store it as results
       const data = await response.json() as AnalysisResult
       setResults(data)
 
@@ -1233,7 +1005,6 @@ export default function App() {
     }
   }
 
-  // Resets all state so the user can start a new analysis
   const handleReset = () => {
     setFile(null)
     setJobDescription('')
@@ -1241,13 +1012,9 @@ export default function App() {
     setError(null)
   }
 
-  // The return value is JSX â€” it looks like HTML but is actually JavaScript.
-  // React converts this into real DOM elements in the browser.
   return (
     <div className="min-h-screen bg-white text-slate-800 antialiased">
       <Header />
-
-      {/* â”€â”€ Hero Section â”€â”€ */}
       <section className="pt-32 pb-16 px-4 sm:px-6 text-center">
         <div className="max-w-3xl mx-auto">
           <motion.div initial={{ opacity: 0, y: -16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.55, ease: 'easeOut' }}>
@@ -1265,8 +1032,6 @@ export default function App() {
           </motion.div>
         </div>
       </section>
-
-      {/* â”€â”€ Informational Sections â”€â”€ */}
       <HowItWorks />
       <StatsSection />
 
@@ -1280,12 +1045,9 @@ export default function App() {
 
           {/* Side-by-side inputs: resume upload (left) and job description (right) */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-            {/* Left: file dropzone */}
             <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 flex flex-col min-h-[240px]">
               <FileDropzone file={file} onFile={setFile} />
             </div>
-
-            {/* Right: job description textarea */}
             <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 flex flex-col">
               <label htmlFor="jd-input" className="block text-sm font-semibold text-slate-700 mb-3">
                 <span className="flex items-center gap-2">
@@ -1331,8 +1093,6 @@ export default function App() {
               </motion.div>
             )}
           </AnimatePresence>
-
-          {/* Analyze / Reset buttons */}
           <div className="mt-5 flex flex-col sm:flex-row items-center justify-center gap-3">
             {/* Analyze button â€” disabled when inputs are incomplete or request is loading */}
             <motion.button
@@ -1369,8 +1129,6 @@ export default function App() {
           </AnimatePresence>
         </div>
       </section>
-
-      {/* â”€â”€ Additional page sections â”€â”€ */}
       <ScoreBreakdownSection />
       <CoverLetterSection file={file} jobDescription={jobDescription} />
       <TestimonialsSection />
